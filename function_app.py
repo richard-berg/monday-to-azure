@@ -13,10 +13,6 @@ from msgraph_fns import sync_all_group_membership, upsert_aad_users
 AZURE_VAULT_URL = "https://cantorivault.vault.azure.net/"
 MONDAY_SECRET_NAME = "monday-api-key"
 
-AZURE_STORAGE_URL = "https://cantoriaadsync.blob.core.windows.net"
-AZURE_STORAGE_CONTAINER = "data-from-monday"
-AZURE_STORAGE_BLOB = "roster"
-
 dfApp = durable_func.DFApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 
@@ -33,8 +29,8 @@ def _parse_webhook_body(request: func.HttpRequest) -> tuple[str, dict]:
     try:
         request_body = request.get_body()
         request_json = json.loads(request_body[:1000])  # prevent DOS
-        challenge = request_json["challenge"]
-        event = request_json["event"]
+        challenge = request_json.get("challenge", "")
+        event = request_json.get("event", {})
         return challenge, event
     except Exception:
         return "", {}
