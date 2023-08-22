@@ -70,6 +70,7 @@ class EmailList:
 EMAIL_LISTS = [
     EmailList("active", lambda u: u.chorus_emails == YES),
     EmailList("social", lambda u: u.social_emails == YES),
+    EmailList("sectionleaders", lambda u: u.section_leader == YES),
     EmailList.from_section("sopranos"),
     EmailList.from_section("altos"),
     EmailList.from_section("tenors"),
@@ -285,6 +286,27 @@ async def _get_aad_group_members(client: GraphServiceClient, group: Group) -> li
         return members.value
     else:
         raise RuntimeError(f"Failed to query {group.mail} membership from AAD")
+
+
+async def get_group_member_names(email_prefix: str) -> list[str]:
+    client = await _create_client()
+    request_configuration = GroupsRequestBuilder.GroupsRequestBuilderGetRequestConfiguration(
+        query_parameters=GroupsRequestBuilder.GroupsRequestBuilderGetQueryParameters(
+            select=["id", "mail"], filter=f"startsWith(mail, '{email_prefix}@')"
+        ),
+    )
+    groups = await client.groups.get(request_configuration=request_configuration)
+    if len(groups.value) != 1:
+        raise ValueError(f"Could not find unique group with email prefix {email_prefix}@")
+    group = groups.value[0]
+    members = await _get_aad_group_members(client, group)
+    return [u.display_name for u in members]
+
+
+async def get_group_email_prefixes() -> list[str]:
+    client = await _create_client()
+    groups = await _get_aad_groups(client)
+    return [g.mail.split("@")[0] for g in groups]
 
 
 async def main():

@@ -1,24 +1,53 @@
 import json
 import logging
 
+from azure.durable_functions import DurableOrchestrationClient
 import azure.durable_functions as durable_func
 import azure.functions as func
 from azure.identity.aio import DefaultAzureCredential
 from azure.keyvault.secrets.aio import SecretClient
 
 from monday_fns import MondayUser, get_monday_roster
-from msgraph_fns import sync_all_group_membership, upsert_aad_users
+from msgraph_fns import (
+    get_group_email_prefixes,
+    get_group_member_names,
+    sync_all_group_membership,
+    upsert_aad_users,
+)
 
 
 AZURE_VAULT_URL = "https://cantorivault.vault.azure.net/"
 MONDAY_SECRET_NAME = "monday-api-key"
 
-dfApp = durable_func.DFApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+app = durable_func.DFApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 
-@dfApp.route(route="monday-webhook")
-@dfApp.durable_client_input(client_name="client")
-async def monday_webhook(req: func.HttpRequest, client) -> func.HttpResponse:
+@app.route(route="group/{group:alpha}")
+async def get_group_members(req: func.HttpRequest) -> func.HttpResponse:
+    group = req.route_params.get("group")
+    try:
+        names = await get_group_member_names(group)
+        return func.HttpResponse("\n".join(sorted(names)))
+    except ValueError as e:
+        return func.HttpResponse(str(e), status_code=404)
+
+
+@app.route(route="groups")
+async def get_groups(req: func.HttpRequest) -> func.HttpResponse:
+    groups = await get_group_email_prefixes()
+    return func.HttpResponse("\n".join(sorted(groups)))
+
+
+@app.schedule(schedule="42 42 * * * *", arg_name="mytimer")
+@app.durable_client_input(client_name="client")
+async def scheduled_sync(mytimer: func.TimerRequest, client: DurableOrchestrationClient) -> None:
+    instance_id = await client.start_new(monday_sync_orchestrator._function._name, client_input={})
+    logging.info(f"Started periodic Monday->AAD sync with instance_id {instance_id}")
+
+
+@app.route(route="monday-webhook")
+@app.durable_client_input(client_name="client")
+async def monday_webhook(req: func.HttpRequest, client: DurableOrchestrationClient) -> func.HttpResponse:
     challenge, event = _parse_webhook_body(req)
     instance_id = await client.start_new(monday_sync_orchestrator._function._name, client_input=event)
     response = client.create_check_status_response(req, instance_id)
@@ -52,19 +81,18 @@ def _insert_challenge(challenge: str, response: func.HttpResponse) -> func.HttpR
     )
 
 
-@dfApp.orchestration_trigger(context_name="context")
+@app.orchestration_trigger(context_name="context")
 def monday_sync_orchestrator(context: durable_func.DurableOrchestrationContext):
-    retry_options = durable_func.RetryOptions(5000, 3)
+    retry_options = durable_func.RetryOptions(5000, 2)
     webhook_event = context.get_input()
     roster = yield context.call_activity_with_retry(pull_from_monday, retry_options, webhook_event)
-    # push_result = yield context.call_activity_with_retry(push_to_aad, retry_options, roster)
-    push_result = yield context.call_activity(push_to_aad, roster)
+    push_result = yield context.call_activity_with_retry(push_to_aad, retry_options, roster)
 
     return push_result
 
 
-@dfApp.activity_trigger(input_name="webhookEvent")
-async def pull_from_monday(webhookEvent) -> list[MondayUser]:
+@app.activity_trigger(input_name="webhookEvent")
+async def pull_from_monday(webhookEvent: dict) -> list[MondayUser]:
     async with DefaultAzureCredential() as credential:
         secret_client = SecretClient(vault_url=AZURE_VAULT_URL, credential=credential)
         monday_api_key = await secret_client.get_secret(MONDAY_SECRET_NAME)
@@ -75,7 +103,7 @@ async def pull_from_monday(webhookEvent) -> list[MondayUser]:
         return roster
 
 
-@dfApp.activity_trigger(input_name="roster")
+@app.activity_trigger(input_name="roster")
 async def push_to_aad(roster: list[MondayUser]) -> list:
     email_to_user_id = await upsert_aad_users(roster)
     await sync_all_group_membership(roster, email_to_user_id)
