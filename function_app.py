@@ -38,7 +38,7 @@ async def get_groups(req: func.HttpRequest) -> func.HttpResponse:
     return func.HttpResponse("\n".join(sorted(groups)))
 
 
-@app.schedule(schedule="42 42 * * * *", arg_name="mytimer")
+@app.schedule(schedule="42 42 */6 * * *", arg_name="mytimer")
 @app.durable_client_input(client_name="client")
 async def scheduled_sync(mytimer: func.TimerRequest, client: DurableOrchestrationClient) -> None:
     instance_id = await client.start_new(monday_sync_orchestrator._function._name, client_input={})
