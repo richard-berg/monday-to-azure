@@ -80,6 +80,8 @@ EMAIL_LISTS = [
 USERS_IN_EVERY_EMAIL_LIST = {
     "richard.berg@cantorinewyork.com",
     "markshapiro212@gmail.com",
+    "chelsea.harvey@cantorinewyork.com",
+    "krdinicola@gmail.com",
 }
 
 
