@@ -82,6 +82,7 @@ USERS_IN_EVERY_EMAIL_LIST = {
     "markshapiro212@gmail.com",
     "chelsea.harvey@cantorinewyork.com",
     "krdinicola@gmail.com",
+    "cantoriscores@gmail.com",
 }
 
 
