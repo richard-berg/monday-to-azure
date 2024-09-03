@@ -7,8 +7,8 @@ from inflection import parameterize
 import httpx
 
 API_URL = "https://api.monday.com/v2"
-API_VERSION = "2023-04"
-DEFAULT_BOARD_ID = 4609409564
+API_VERSION = "2023-10"
+DEFAULT_BOARD_ID = 6792979476
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class MondayUser:
     def from_board_api(cls: Type[Self], board_item: dict[str, object]) -> Self:
         values = {"name": board_item["name"]}
         for column_value in board_item["column_values"]:  # type: ignore
-            field = parameterize(column_value["title"], "_")
+            field = parameterize(column_value["column"]["title"], "_")
             if field in cls.__dataclass_fields__:
                 values[field] = column_value["text"]
         return cls(**values)  # type: ignore
@@ -44,14 +44,21 @@ class MondayUser:
 
 async def get_monday_roster(api_key: str, webhook_event: dict) -> list[MondayUser]:
     query = """
-    query RosterDump($boardId: Int!) {
+    query RosterDump($boardId: ID!) {
         boards(ids: [$boardId]) {
-            items(limit:1000) {
-            name
-            column_values() {
-                title
-                text
+            columns {
+              title
             }
+            items_page(limit:500) {
+                items {
+                    name
+                    column_values {
+                        column {
+                            title
+                        }
+                        text
+                    }
+                }
             }
         }
     }
@@ -61,6 +68,6 @@ async def get_monday_roster(api_key: str, webhook_event: dict) -> list[MondayUse
     outer_json = {"query": query, "variables": vars}
     async with httpx.AsyncClient() as client:
         response = await client.post(url=API_URL, json=outer_json, headers=headers)
-        j = json.loads(response.text)
-        roster = [MondayUser.from_board_api(item) for item in j["data"]["boards"][0]["items"]]
-        return roster
+    j = json.loads(response.text)
+    roster = [MondayUser.from_board_api(item) for item in j["data"]["boards"][0]["items_page"]["items"]]
+    return roster
