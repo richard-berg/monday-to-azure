@@ -3,17 +3,20 @@
   "configurations": [
     {
       "name": "Python: Current File",
-      "type": "python",
+      "type": "debugpy",
       "request": "launch",
       "program": "${file}",
       "console": "integratedTerminal",
-      "justMyCode": true
+      "justMyCode": true,
+      "env": {
+        "GAGGLE_API_KEY": "3856f21f-ad48-4cb2-bdb5-2008f32cf263"
+      }
     },
     {
       "name": "Attach to Python Functions",
-      "type": "python",
+      "type": "debugpy",
       "request": "attach",
-      "port": 9091,
+      "connect": { "port": 9091 },
       "preLaunchTask": "func: host start"
     }
   ]

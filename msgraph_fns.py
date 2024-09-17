@@ -1,12 +1,11 @@
 import asyncio
-from dataclasses import dataclass
+
 import logging
-from typing import Callable, Type
-from typing_extensions import Self
+
 
 from asyncio_pool import AioPool
 from azure.identity.aio import DefaultAzureCredential
-from inflection import camelize, pluralize
+from inflection import camelize
 from msgraph import GraphServiceClient
 from msgraph.generated.groups.groups_request_builder import GroupsRequestBuilder
 from msgraph.generated.models.group import Group
@@ -16,6 +15,7 @@ from msgraph.generated.models.reference_create import ReferenceCreate
 from msgraph.generated.models.user import User
 from msgraph.generated.users.users_request_builder import UsersRequestBuilder
 
+from email_lists import EMAIL_LISTS, USERS_IN_EVERY_EMAIL_LIST, YES, EmailList
 from monday_fns import MondayUser
 
 MSGRAPH_SCOPES = ["https://graph.microsoft.com/.default"]
@@ -48,42 +48,6 @@ EXTENSION_FIELDS = {"chorus_emails", "social_emails", "section_leader"}
 
 MAX_CONCURRENCY = 10
 MAX_USERS = 999
-
-YES = "Yes"
-
-
-@dataclass
-class EmailList:
-    email_prefix: str
-    roster_filter: Callable[[MondayUser], bool]
-
-    @classmethod
-    def from_section(cls: Type[Self], section: str) -> "EmailList":
-        def satb_filter(u: MondayUser) -> bool:
-            voice_part_satb = u.voice_part.lower().split(" ")[0]
-            voice_part_plural = pluralize(voice_part_satb)
-            return u.chorus_emails == YES and section == voice_part_plural
-
-        return EmailList(section, satb_filter)
-
-
-EMAIL_LISTS = [
-    EmailList("active", lambda u: u.chorus_emails == YES),
-    EmailList("social", lambda u: u.social_emails == YES),
-    EmailList("sectionleaders", lambda u: u.section_leader == YES),
-    EmailList.from_section("sopranos"),
-    EmailList.from_section("altos"),
-    EmailList.from_section("tenors"),
-    EmailList.from_section("basses"),
-]
-
-USERS_IN_EVERY_EMAIL_LIST = {
-    "richard.berg@cantorinewyork.com",
-    "markshapiro212@gmail.com",
-    "chelsea.harvey@cantorinewyork.com",
-    "krdinicola@gmail.com",
-    "cantoriscores@gmail.com",
-}
 
 
 async def _create_client() -> GraphServiceClient:

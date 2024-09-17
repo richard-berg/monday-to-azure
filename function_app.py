@@ -1,23 +1,19 @@
 import json
 import logging
 
-from azure.durable_functions import DurableOrchestrationClient
 import azure.durable_functions as durable_func
 import azure.functions as func
+from azure.durable_functions import DurableOrchestrationClient
 from azure.identity.aio import DefaultAzureCredential
 from azure.keyvault.secrets.aio import SecretClient
 
+import gaggle_fns
+import msgraph_fns
 from monday_fns import MondayUser, get_monday_roster
-from msgraph_fns import (
-    get_group_email_prefixes,
-    get_group_member_names,
-    sync_all_group_membership,
-    upsert_aad_users,
-)
-
 
 AZURE_VAULT_URL = "https://cantorivault.vault.azure.net/"
 MONDAY_SECRET_NAME = "monday-api-key"
+GAGGLE_SECRET_NAME = "gaggle-api-key"
 
 app = durable_func.DFApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -26,7 +22,7 @@ app = durable_func.DFApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 async def get_group_members(req: func.HttpRequest) -> func.HttpResponse:
     group = req.route_params.get("group")
     try:
-        names = await get_group_member_names(group)
+        names = await msgraph_fns.get_group_member_names(group)
         return func.HttpResponse("\n".join(sorted(names)))
     except ValueError as e:
         return func.HttpResponse(str(e), status_code=404)
@@ -34,7 +30,7 @@ async def get_group_members(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.route(route="groups")
 async def get_groups(req: func.HttpRequest) -> func.HttpResponse:
-    groups = await get_group_email_prefixes()
+    groups = await msgraph_fns.get_group_email_prefixes()
     return func.HttpResponse("\n".join(sorted(groups)))
 
 
@@ -86,9 +82,10 @@ def monday_sync_orchestrator(context: durable_func.DurableOrchestrationContext):
     retry_options = durable_func.RetryOptions(5000, 2)
     webhook_event = context.get_input()
     roster = yield context.call_activity_with_retry(pull_from_monday, retry_options, webhook_event)
-    push_result = yield context.call_activity_with_retry(push_to_aad, retry_options, roster)
+    gaggle_result = yield context.call_activity_with_retry(push_to_gaggle, retry_options, roster)
+    aad_result = yield context.call_activity_with_retry(push_to_aad, retry_options, roster)
 
-    return push_result
+    return aad_result + gaggle_result
 
 
 @app.activity_trigger(input_name="webhookEvent")
@@ -105,6 +102,17 @@ async def pull_from_monday(webhookEvent: dict) -> list[MondayUser]:
 
 @app.activity_trigger(input_name="roster")
 async def push_to_aad(roster: list[MondayUser]) -> list:
-    email_to_user_id = await upsert_aad_users(roster)
-    await sync_all_group_membership(roster, email_to_user_id)
+    email_to_user_id = await msgraph_fns.upsert_aad_users(roster)
+    await msgraph_fns.sync_all_group_membership(roster, email_to_user_id)
     return []  # Durable Function runtime requires a JSON-parsable return value
+
+
+@app.activity_trigger(input_name="roster")
+async def push_to_gaggle(roster: list[MondayUser]) -> list:
+    async with DefaultAzureCredential() as credential:
+        secret_client = SecretClient(vault_url=AZURE_VAULT_URL, credential=credential)
+        gaggle_api_key = await secret_client.get_secret(GAGGLE_SECRET_NAME)
+        if not gaggle_api_key.value:
+            raise RuntimeError("Gaggle API key not found in Vault")
+    await gaggle_fns.sync_all_group_membership(gaggle_api_key.value, roster)
+    return []
