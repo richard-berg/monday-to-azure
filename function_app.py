@@ -91,13 +91,13 @@ def monday_sync_orchestrator(context: durable_func.DurableOrchestrationContext):
 @app.activity_trigger(input_name="webhookEvent")
 async def pull_from_monday(webhookEvent: dict) -> list[MondayUser]:
     async with DefaultAzureCredential() as credential:
-        secret_client = SecretClient(vault_url=AZURE_VAULT_URL, credential=credential)
-        monday_api_key = await secret_client.get_secret(MONDAY_SECRET_NAME)
-        if not monday_api_key.value:
-            raise RuntimeError("Monday API key not found in Vault")
-        roster = await get_monday_roster(monday_api_key.value, webhookEvent)
-        logging.info(f"Got {len(roster)} users from Monday.com")
-        return roster
+        async with SecretClient(vault_url=AZURE_VAULT_URL, credential=credential) as secret_client:
+            monday_api_key = await secret_client.get_secret(MONDAY_SECRET_NAME)
+            if not monday_api_key.value:
+                raise RuntimeError("Monday API key not found in Vault")
+            roster = await get_monday_roster(monday_api_key.value, webhookEvent)
+            logging.info(f"Got {len(roster)} users from Monday.com")
+            return roster
 
 
 @app.activity_trigger(input_name="roster")
@@ -110,9 +110,9 @@ async def push_to_aad(roster: list[MondayUser]) -> list:
 @app.activity_trigger(input_name="roster")
 async def push_to_gaggle(roster: list[MondayUser]) -> list:
     async with DefaultAzureCredential() as credential:
-        secret_client = SecretClient(vault_url=AZURE_VAULT_URL, credential=credential)
-        gaggle_api_key = await secret_client.get_secret(GAGGLE_SECRET_NAME)
-        if not gaggle_api_key.value:
-            raise RuntimeError("Gaggle API key not found in Vault")
+        async with SecretClient(vault_url=AZURE_VAULT_URL, credential=credential) as secret_client:
+            gaggle_api_key = await secret_client.get_secret(GAGGLE_SECRET_NAME)
+            if not gaggle_api_key.value:
+                raise RuntimeError("Gaggle API key not found in Vault")
     await gaggle_fns.sync_all_group_membership(gaggle_api_key.value, roster)
     return []
