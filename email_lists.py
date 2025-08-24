@@ -55,6 +55,7 @@ EMAIL_LISTS = [
     EmailList("active", lambda u: u.chorus_emails == YES),
     EmailList("social", lambda u: u.social_emails == YES),
     EmailList("sectionleaders", lambda u: u.section_leader == YES),
+    EmailList("sectioncoordinators", lambda u: u.section_coordinator == YES),
     EmailList.from_section("sopranos"),
     EmailList.from_section("altos"),
     EmailList.from_section("tenors"),
@@ -65,7 +66,8 @@ USERS_IN_EVERY_EMAIL_LIST = {
     "richard.berg@cantorinewyork.com",
     "markshapiro212@gmail.com",
     "chelsea.harvey@cantorinewyork.com",
-    "krdinicola@gmail.com",
+    "maggie.dobbins@cantorinewyork.com",
+    "janara.kellerman@cantorinewyork.com",
     "cantoriscores@gmail.com",
 }
 
