@@ -15,6 +15,7 @@ from msgraph.generated.models.reference_create import ReferenceCreate
 from msgraph.generated.models.user import User
 from msgraph.generated.users.users_request_builder import UsersRequestBuilder
 
+
 from email_lists import EMAIL_LISTS, USERS_IN_EVERY_EMAIL_LIST, YES, EmailList
 from monday_fns import MondayUser
 
@@ -44,10 +45,11 @@ USER_KEYS = {
 USER_FIELDS_CAN_PATCH = USER_FIELDS - USER_KEYS
 
 EXTENSION_TYPE = ".".join(reversed(SERVICE_DOMAIN.split(".")))
-EXTENSION_FIELDS = {"chorus_emails", "social_emails", "section_leader"}
+EXTENSION_FIELDS = {"chorus_emails", "social_emails", "section_leader", "section_coordinator"}
 
 MAX_CONCURRENCY = 10
 MAX_USERS = 999
+MIN_USERS = 10
 
 
 async def _create_client() -> GraphServiceClient:
@@ -63,11 +65,21 @@ async def _get_aad_users(client: GraphServiceClient, fields) -> list[User]:
             top=MAX_USERS,
         )
     )
-    aad_users = await client.users.get(request_configuration=request_configuration)
+    aad_users = []
 
-    if aad_users and aad_users.value:
-        logging.info(f"Found {len(aad_users.value)} users in AAD")
-        return aad_users.value
+    results = await client.users.get(request_configuration=request_configuration)
+    if results and results.value:
+        aad_users.extend(results.value)
+
+    while results is not None and results.odata_next_link is not None:
+        results = await client.users.with_url(results.odata_next_link).get()
+        if results and results.value:
+            aad_users.extend(results.value)
+
+    num_users = len(aad_users)
+    logging.info(f"Found {num_users} users in AAD")
+    if num_users >= MIN_USERS:
+        return aad_users
     else:
         raise RuntimeError("Failed to query users from AAD")
 
@@ -280,28 +292,13 @@ async def main():
     logging.basicConfig(level=logging.INFO)
     roster = [
         MondayUser(
-            email="thomasinb@gmail.com",
-            name="Thomasin Bentley",
-            voice_part="Alto 1",
-            chorus_emails="",
-            social_emails="",
-            section_leader="",
-        ),
-        MondayUser(
-            email="tristan.lesso@cantorinewyork.com",
-            name="Tristan Lesso",
-            voice_part="",
-            chorus_emails="",
-            social_emails="",
-            section_leader="",
-        ),
-        MondayUser(
             email="test@cantorinewyork.com",
             name="Test User Internal",
             voice_part="",
             chorus_emails="",
             social_emails=YES,
             section_leader="",
+            section_coordinator="",
         ),
     ]
     email_to_user_id = await upsert_aad_users(roster)

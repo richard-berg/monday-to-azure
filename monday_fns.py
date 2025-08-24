@@ -7,8 +7,8 @@ from inflection import parameterize
 import httpx
 
 API_URL = "https://api.monday.com/v2"
-API_VERSION = "2023-10"
-DEFAULT_BOARD_ID = 6792979476
+API_VERSION = "2025-07"
+DEFAULT_BOARD_ID = 9192120251
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,7 @@ class MondayUser:
     chorus_emails: str
     social_emails: str
     section_leader: str
+    section_coordinator: str
 
     @classmethod
     def from_board_api(cls: Type[Self], board_item: dict[str, object]) -> Self:
