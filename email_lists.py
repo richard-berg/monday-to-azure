@@ -66,7 +66,7 @@ USERS_IN_EVERY_EMAIL_LIST = {
     "richard.berg@cantorinewyork.com",
     "markshapiro212@gmail.com",
     "chelsea.harvey@cantorinewyork.com",
-    "maggie.dobbins@cantorinewyork.com",
+    "stephen.buck@cantorinewyork.com",
     "janara.kellerman@cantorinewyork.com",
     "cantoriscores@gmail.com",
 }
